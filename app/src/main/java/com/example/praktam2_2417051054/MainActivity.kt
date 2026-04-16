@@ -8,13 +8,13 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -53,7 +53,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -62,6 +61,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.praktam2_2417051054.ui.theme.*
 import androidx.compose.material3.MaterialTheme
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.NavController
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.navigation.NavHostController
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import model.Barang
 import model.BarangSource
 
@@ -82,25 +94,41 @@ class MainActivity : ComponentActivity() {
         )
         setContent {
             PrakTAM2_2417051054Theme {
-                Main("Dashboard")
+                val navController = rememberNavController()
+                AppNavigation(navController = navController)
             }
         }
     }
 }
 
 @Composable
-fun Main(page: String) {
+fun AppNavigation(navController: NavHostController) {
     Scaffold( modifier = Modifier.fillMaxSize() ) { innerPadding ->
-        if (page == "Dashboard") {
-            DashboardScreen(modifier = Modifier.padding(innerPadding))
-        } else if (page == "Kasir") {
-            KasirScreen(modifier = Modifier.padding(innerPadding))
+        NavHost(
+            navController = navController,
+            startDestination = "home"
+        ) {
+            composable("home") {
+                DashboardScreen(modifier = Modifier.padding(innerPadding), navController = navController)
+            }
+
+            composable("detail/{nama}") { backStackEntry ->
+                val nama =
+                    backStackEntry.arguments?.getString("nama")
+                val barang = BarangSource.listBarang.find {
+                    it.nama == nama
+                }
+                if (barang != null) {
+                    DetailRinciBarang(modifier = Modifier.padding(innerPadding), barang = barang, navController = navController)
+                }
+            }
         }
     }
+
 }
 
 @Composable
-fun DashboardScreen(modifier: Modifier = Modifier) {
+fun DashboardScreen(modifier: Modifier = Modifier, navController: NavController) {
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -255,7 +283,7 @@ fun DashboardScreen(modifier: Modifier = Modifier) {
                     .take(5)
 
                 items(bestSeller) { barang ->
-                    DetailBarangTerlaris(barang = barang)
+                    DetailBarangTerlaris(barang = barang, navController = navController)
                 }
             }
 
@@ -358,9 +386,11 @@ fun DashboardScreen(modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun DetailBarangTerlaris(barang: Barang) {
+fun DetailBarangTerlaris(barang: Barang, navController: NavController) {
     Card(
-        modifier = Modifier.width(125.dp),
+        modifier = Modifier
+            .width(125.dp)
+            .clickable{navController.navigate("detail/${barang.nama}")},
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
         shape = RoundedCornerShape(10.dp)
@@ -415,6 +445,10 @@ fun KasirScreen(modifier: Modifier = Modifier) {
     var searchValue by remember { mutableStateOf("") }
     var totalItem by remember { mutableIntStateOf(0) }
     var totalHarga by remember { mutableIntStateOf(0) }
+
+    var isLoading by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     Box (
         modifier = modifier
@@ -503,17 +537,41 @@ fun KasirScreen(modifier: Modifier = Modifier) {
             }
 
             Button(
-                onClick = { },
+                onClick = {
+                    coroutineScope.launch {
+                        isLoading = true
+                        delay(2000)
+                        snackbarHostState.showSnackbar(
+                            "Pembayaran berhasil diproses!"
+                        )
+                        isLoading = false
+                    }
+                },
                 shape = RoundedCornerShape(10.dp),
-
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary
-                )
+                ),
+                enabled = !isLoading
             ) {
-                Text(text = "Bayar", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onPrimary)
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = MaterialTheme.colorScheme.secondary,
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Memproses...")
+                } else {
+                    Text(text = "Bayar", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onPrimary)
+                }
             }
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
     }
 }
 
@@ -606,18 +664,121 @@ fun DetailBarang(barang: Barang) {
     }
 }
 
-@Preview(showBackground = true)
 @Composable
-fun KasirPreview() {
-    PrakTAM2_2417051054Theme {
-        Main("Kasir")
+fun DetailRinciBarang(modifier: Modifier = Modifier, barang: Barang, navController: NavController) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 30.dp),
+            verticalArrangement = Arrangement.spacedBy(30.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(Modifier.height(170.dp))
+
+            Image(
+                painter = painterResource(id = barang.ImagesRes),
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .size(300.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(5.dp)
+            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth(),
+                Arrangement.spacedBy(8.dp)
+            ) {
+                Text(text = barang.nama, style = MaterialTheme.typography.headlineLarge)
+                Text(text = "Rp ${barang.harga}", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.surface)
+                        .padding(horizontal = 20.dp, vertical = 15.dp),
+                    verticalArrangement = Arrangement.spacedBy(7.dp)
+                ) {
+                    Text(text = "Sisa Stok", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
+                    Text(text = "${barang.stok} Pcs", style = MaterialTheme.typography.headlineMedium)
+                }
+
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.surface)
+                        .padding(horizontal = 20.dp, vertical = 15.dp),
+                    verticalArrangement = Arrangement.spacedBy(7.dp)
+                ) {
+                    Text(text = "Terjual", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
+                    Text(text = "${barang.terjual} Pcs", style = MaterialTheme.typography.headlineMedium)
+                }
+            }
+        }
+
+        // Top Bar
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(bottomEnd = 25.dp, bottomStart = 25.dp))
+                .background(color = MaterialTheme.colorScheme.primary)
+                .padding(20.dp, 30.dp)
+                .padding(bottom = 10.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowLeft,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(15.dp)
+                        .scale(2.5f)
+                        .clickable{navController.popBackStack()},
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                )
+
+                Spacer(Modifier.width(20.dp))
+
+                Text(text = "Detail Barang", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.titleMedium)
+            }
+        }
     }
 }
+
+//@Preview(showBackground = true)
+//@Composable
+//fun KasirPreview() {
+//    PrakTAM2_2417051054Theme {
+//        Main()
+//    }
+//}
 
 @Preview(showBackground = true)
 @Composable
 fun DashboardPreview() {
     PrakTAM2_2417051054Theme {
-        Main("Dashboard")
+        DashboardScreen(modifier = Modifier, navController = rememberNavController())
     }
 }
+
+//@Preview(showBackground = true)
+//@Composable
+//fun DetailRinciPreview() {
+//    PrakTAM2_2417051054Theme {
+//        DetailRinciItem(barang = BarangSource.listBarang[0])
+//    }
+//}
