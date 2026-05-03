@@ -1,11 +1,11 @@
 package com.example.praktam2_2417051054
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -56,7 +56,6 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.praktam2_2417051054.ui.theme.*
@@ -69,13 +68,15 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.navigation.NavHostController
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import network.RetrofitClient
+import coil.compose.AsyncImage
 import model.Barang
-import model.BarangSource
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -104,20 +105,27 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun AppNavigation(navController: NavHostController) {
     Scaffold( modifier = Modifier.fillMaxSize() ) { innerPadding ->
+        var listBarang by remember { mutableStateOf<List<Barang>>(emptyList()) }
+
         NavHost(
             navController = navController,
-            startDestination = "home"
+            startDestination = "kasir"
         ) {
             composable("home") {
-                DashboardScreen(modifier = Modifier.padding(innerPadding), navController = navController)
+                DashboardScreen(modifier = Modifier.padding(innerPadding), navController = navController) { fechedBarang ->
+                    listBarang = fechedBarang
+                }
+            }
+
+            composable("kasir") {
+                KasirScreen(modifier = Modifier.padding(innerPadding)) { fechedBarang ->
+                    listBarang = fechedBarang
+                }
             }
 
             composable("detail/{nama}") { backStackEntry ->
-                val nama =
-                    backStackEntry.arguments?.getString("nama")
-                val barang = BarangSource.listBarang.find {
-                    it.nama == nama
-                }
+                val nama = backStackEntry.arguments?.getString("nama")
+                val barang = listBarang.find { it.nama == nama }
                 if (barang != null) {
                     DetailRinciBarang(modifier = Modifier.padding(innerPadding), barang = barang, navController = navController)
                 }
@@ -128,256 +136,305 @@ fun AppNavigation(navController: NavHostController) {
 }
 
 @Composable
-fun DashboardScreen(modifier: Modifier = Modifier, navController: NavController) {
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        Column(
+fun DashboardScreen(modifier: Modifier = Modifier, navController: NavController, onBarangLoaded: (List<Barang>) -> Unit = {}) {
+    var listBarang by remember { mutableStateOf<List<Barang>>(emptyList()) }
+    var isLoadingBarang by remember { mutableStateOf(true) }
+    var isError by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        try {
+            listBarang = RetrofitClient.instance.getBarang()
+            onBarangLoaded(listBarang)
+            isLoadingBarang = false
+        } catch (e: Exception) {
+            Log.e("API_ERROR", "Gagal ngambil data barang: ${e.message}")
+            isLoadingBarang = false
+            isError = true
+        }
+    }
+
+    if (isLoadingBarang) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+    } else if (isError || listBarang.isEmpty()) {
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 25.dp)
-                .verticalScroll(rememberScrollState()),
+                .padding(32.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Spacer(modifier = Modifier.height(235.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(20.dp)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Card(
-                    modifier = Modifier
-                        .weight(1f)
-                        .border(width = 2.dp, color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(20.dp)),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-                    shape = RoundedCornerShape(20.dp)
-                ) {
-                    Column(modifier = Modifier.padding(20.dp, 15.dp)) {
-                        Text(text = "Total Transaksi", style = MaterialTheme.typography.labelLarge)
-
-                        Spacer(Modifier.height(5.dp))
-
-                        Row(verticalAlignment = Alignment.Bottom) {
-                            Text(text = "45", style = MaterialTheme.typography.headlineLarge)
-                            Text(text = " Pelanggan", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
-                        }
-                    }
-                }
-
-                Card(
-                    modifier = Modifier
-                        .weight(1f)
-                        .border(width = 2.dp, color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(20.dp)),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-                    shape = RoundedCornerShape(20.dp)
-                ) {
-                    Column(modifier = Modifier.padding(20.dp, 15.dp)) {
-                        Text(text = "Barang Terjual", style = MaterialTheme.typography.labelLarge)
-
-                        Spacer(Modifier.height(5.dp))
-
-                        Row(verticalAlignment = Alignment.Bottom) {
-                            Text(text = "100", style = MaterialTheme.typography.headlineLarge)
-                            Text(text = " Item", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
-                        }
-                    }
-                }
+                Text(
+                    text = "Gagal Memuat Data",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Red
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Pastikan koneksi internet Anda menyala",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.Gray,
+                    textAlign =
+                        TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
-
-            Spacer(Modifier.height(30.dp))
-
-            Text(text = "Menu Utama", style = MaterialTheme.typography.titleMedium)
-
-            Spacer(Modifier.height(10.dp))
-
-            Row {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.ic_calculator),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(60.dp)
-                            .clip(shape = RoundedCornerShape(20.dp))
-                            .background(color = MaterialTheme.colorScheme.surfaceVariant)
-                            .padding(10.dp, 15.dp),
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
-
-                    Spacer(Modifier.height(5.dp))
-                    Text(text = "Kasir", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)
-                }
-
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.ic_cubes),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(60.dp)
-                            .clip(shape = RoundedCornerShape(20.dp))
-                            .background(color = IconUnguBg)
-                            .padding(10.dp, 15.dp),
-                        tint = IconUngu
-                    )
-
-                    Spacer(Modifier.height(5.dp))
-                    Text(text = "Barang", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)
-                }
-
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.ic_history),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(60.dp)
-                            .clip(shape = RoundedCornerShape(20.dp))
-                            .background(color = IconOrenBg)
-                            .padding(10.dp, 15.dp),
-                        tint = IconOren
-                    )
-
-                    Spacer(Modifier.height(5.dp))
-                    Text(text = "Riwayat", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)
-                }
-
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(
-                        Icons.Filled.Settings,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(60.dp)
-                            .clip(shape = RoundedCornerShape(20.dp))
-                            .background(color = IconAbuBg)
-                            .padding(10.dp, 15.dp),
-                        tint = MaterialTheme.colorScheme.secondary
-                    )
-
-                    Spacer(Modifier.height(5.dp))
-                    Text(text = "Setting", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)
-                }
-            }
-
-            Spacer(Modifier.height(30.dp))
-
-            Text(text = "Barang Terlaris", style = MaterialTheme.typography.titleMedium)
-
-            Spacer(Modifier.height(15.dp))
-
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(15.dp)) {
-                val bestSeller = BarangSource.listBarang
-                    .sortedByDescending { it.terjual }
-                    .take(5)
-
-                items(bestSeller) { barang ->
-                    DetailBarangTerlaris(barang = barang, navController = navController)
-                }
-            }
-
-            Spacer(Modifier.height(30.dp))
-
-            Row (
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+        }
+    } else {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 25.dp)
+                    .verticalScroll(rememberScrollState()),
             ) {
-                Text(text = "Transaksi Terakhir", style = MaterialTheme.typography.titleMedium)
-                Text(text = "Lihat Semua", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
-            }
+                Spacer(modifier = Modifier.height(235.dp))
 
-            Spacer(Modifier.height(15.dp))
-
-            Column (verticalArrangement = Arrangement.spacedBy(15.dp)) {
-                for (i in 1..3) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(20.dp)
+                ) {
                     Card(
                         modifier = Modifier
-                            .fillMaxWidth()
+                            .weight(1f)
                             .border(width = 2.dp, color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(20.dp)),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
                         shape = RoundedCornerShape(20.dp)
                     ) {
-                        Row (
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(20.dp, 15.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ){
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Filled.ShoppingCart,
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .background(color = MaterialTheme.colorScheme.surfaceVariant, shape = CircleShape)
-                                        .padding(10.dp),
-                                    tint = MaterialTheme.colorScheme.onSurface
-                                )
+                        Column(modifier = Modifier.padding(20.dp, 15.dp)) {
+                            Text(text = "Total Transaksi", style = MaterialTheme.typography.labelLarge)
 
-                                Spacer(Modifier.width(10.dp))
+                            Spacer(Modifier.height(5.dp))
 
-                                Column(verticalArrangement = Arrangement.spacedBy((-2).dp)) {
-                                    Text(text = "PJ-0000${i}", style = MaterialTheme.typography.labelLarge)
-                                    Text(text = "1 Barang", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
-                                }
+                            Row(verticalAlignment = Alignment.Bottom) {
+                                Text(text = "45", style = MaterialTheme.typography.headlineLarge)
+                                Text(text = " Pelanggan", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
                             }
+                        }
+                    }
 
-                            Text(text = "Rp 45.000", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                    Card(
+                        modifier = Modifier
+                            .weight(1f)
+                            .border(width = 2.dp, color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(20.dp)),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                        shape = RoundedCornerShape(20.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(20.dp, 15.dp)) {
+                            Text(text = "Barang Terjual", style = MaterialTheme.typography.labelLarge)
+
+                            Spacer(Modifier.height(5.dp))
+
+                            Row(verticalAlignment = Alignment.Bottom) {
+                                Text(text = "100", style = MaterialTheme.typography.headlineLarge)
+                                Text(text = " Item", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                            }
                         }
                     }
                 }
 
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(30.dp))
+
+                Text(text = "Menu Utama", style = MaterialTheme.typography.titleMedium)
+
+                Spacer(Modifier.height(10.dp))
+
+                Row {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_calculator),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(60.dp)
+                                .clip(shape = RoundedCornerShape(20.dp))
+                                .background(color = MaterialTheme.colorScheme.surfaceVariant)
+                                .padding(10.dp, 15.dp),
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+
+                        Spacer(Modifier.height(5.dp))
+                        Text(text = "Kasir", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)
+                    }
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_cubes),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(60.dp)
+                                .clip(shape = RoundedCornerShape(20.dp))
+                                .background(color = IconUnguBg)
+                                .padding(10.dp, 15.dp),
+                            tint = IconUngu
+                        )
+
+                        Spacer(Modifier.height(5.dp))
+                        Text(text = "Barang", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)
+                    }
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_history),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(60.dp)
+                                .clip(shape = RoundedCornerShape(20.dp))
+                                .background(color = IconOrenBg)
+                                .padding(10.dp, 15.dp),
+                            tint = IconOren
+                        )
+
+                        Spacer(Modifier.height(5.dp))
+                        Text(text = "Riwayat", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)
+                    }
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            Icons.Filled.Settings,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(60.dp)
+                                .clip(shape = RoundedCornerShape(20.dp))
+                                .background(color = IconAbuBg)
+                                .padding(10.dp, 15.dp),
+                            tint = MaterialTheme.colorScheme.secondary
+                        )
+
+                        Spacer(Modifier.height(5.dp))
+                        Text(text = "Setting", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Spacer(Modifier.height(30.dp))
+
+                Text(text = "Barang Terlaris", style = MaterialTheme.typography.titleMedium)
+
+                Spacer(Modifier.height(15.dp))
+
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(15.dp)) {
+                    val bestSeller = listBarang
+                        .sortedByDescending { it.terjual }
+                        .take(5)
+
+                    items(bestSeller) { barang ->
+                        DetailBarangTerlaris(barang = barang, navController = navController)
+                    }
+                }
+
+                Spacer(Modifier.height(30.dp))
+
+                Row (
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = "Transaksi Terakhir", style = MaterialTheme.typography.titleMedium)
+                    Text(text = "Lihat Semua", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
+                }
+
+                Spacer(Modifier.height(15.dp))
+
+                Column (verticalArrangement = Arrangement.spacedBy(15.dp)) {
+                    for (i in 1..3) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(width = 2.dp, color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(20.dp)),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                            shape = RoundedCornerShape(20.dp)
+                        ) {
+                            Row (
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(20.dp, 15.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ){
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Filled.ShoppingCart,
+                                        contentDescription = null,
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .background(color = MaterialTheme.colorScheme.surfaceVariant, shape = CircleShape)
+                                            .padding(10.dp),
+                                        tint = MaterialTheme.colorScheme.onSurface
+                                    )
+
+                                    Spacer(Modifier.width(10.dp))
+
+                                    Column(verticalArrangement = Arrangement.spacedBy((-2).dp)) {
+                                        Text(text = "PJ-0000${i}", style = MaterialTheme.typography.labelLarge)
+                                        Text(text = "1 Barang", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                                    }
+                                }
+
+                                Text(text = "Rp 45.000", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(20.dp))
+                }
             }
-        }
 
-        Box(contentAlignment = Alignment.TopCenter) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(bottomStart = 30.dp, bottomEnd = 30.dp))
-                    .background(MaterialTheme.colorScheme.primary)
-                    .padding(25.dp, 24.dp, bottom = 80.dp, end = 25.dp)
-            ) {
-                Text(text = "Sabtu, 28 Februari 2026", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
-                Text(text = "Halo, Abdul!", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.onPrimary)
-            }
+            Box(contentAlignment = Alignment.TopCenter) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(bottomStart = 30.dp, bottomEnd = 30.dp))
+                        .background(MaterialTheme.colorScheme.primary)
+                        .padding(25.dp, 24.dp, bottom = 80.dp, end = 25.dp)
+                ) {
+                    Text(text = "Sabtu, 28 Februari 2026", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
+                    Text(text = "Halo, Abdul!", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.onPrimary)
+                }
 
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 110.dp)
-                    .padding(horizontal = 25.dp)
-                    .border(width = 2.dp, color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(20.dp)),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 25.dp),
-                shape = RoundedCornerShape(20.dp)
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Text(text = "Pendapatan Hari Ini", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.secondary)
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 110.dp)
+                        .padding(horizontal = 25.dp)
+                        .border(width = 2.dp, color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(20.dp)),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 25.dp),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text(text = "Pendapatan Hari Ini", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.secondary)
 
-                    Spacer(Modifier.height(3.dp))
+                        Spacer(Modifier.height(3.dp))
 
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = "Rp", style = MaterialTheme.typography.titleMedium)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(text = "Rp", style = MaterialTheme.typography.titleMedium)
 
-                        Spacer(Modifier.width(5.dp))
+                            Spacer(Modifier.width(5.dp))
 
-                        Text(text = "1.000.000", style = MaterialTheme.typography.displayLarge)
+                            Text(text = "1.000.000", style = MaterialTheme.typography.displayLarge)
+                        }
                     }
                 }
             }
@@ -401,14 +458,18 @@ fun DetailBarangTerlaris(barang: Barang, navController: NavController) {
                 .padding(10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Image(
-                painter = painterResource(id = barang.ImagesRes),
-                contentDescription = null,
+            AsyncImage(
+                model = barang.imagesUrl,
+                contentDescription = barang.nama,
+                placeholder = painterResource(id = R.drawable.gula),
+                error = painterResource(id = R.drawable.telur),
+
                 modifier = Modifier
                     .size(100.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .background(MaterialTheme.colorScheme.background)
-                    .padding(5.dp)
+                    .padding(5.dp),
+                contentScale = ContentScale.Crop
             )
 
             Spacer(Modifier.height(3.dp))
@@ -441,7 +502,11 @@ fun DetailBarangTerlaris(barang: Barang, navController: NavController) {
 }
 
 @Composable
-fun KasirScreen(modifier: Modifier = Modifier) {
+fun KasirScreen(modifier: Modifier = Modifier, onBarangLoaded: (List<Barang>) -> Unit = {}) {
+    var listBarang by remember { mutableStateOf<List<Barang>>(emptyList()) }
+    var isLoadingBarang by remember { mutableStateOf(true) }
+    var isError by remember { mutableStateOf(false) }
+
     var searchValue by remember { mutableStateOf("") }
     var totalItem by remember { mutableIntStateOf(0) }
     var totalHarga by remember { mutableIntStateOf(0) }
@@ -450,128 +515,175 @@ fun KasirScreen(modifier: Modifier = Modifier) {
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    Box (
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        // List Item
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(24.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
-        ) {
-            item { Spacer(Modifier.height(150.dp)) }
 
-            val daftarBarangFilter = if (searchValue == "") {
-                BarangSource.listBarang
-            } else {
-                BarangSource.listBarang.filter { barang ->
-                    barang.nama.contains(searchValue, ignoreCase = true)
-                }
-            }
-
-            items(daftarBarangFilter) { barang ->
-                DetailBarang(barang = barang)
-            }
-
-            item { Spacer(Modifier.height(60.dp)) }
-
+    LaunchedEffect(Unit) {
+        try {
+            listBarang = RetrofitClient.instance.getBarang()
+            onBarangLoaded(listBarang)
+            isLoadingBarang = false
+        } catch (e: Exception) {
+            Log.e("API_ERROR", "Gagal ngambil data barang: ${e.message}")
+            isLoadingBarang = false
+            isError = true
         }
+    }
 
-        // Top Bar
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(bottomEnd = 25.dp, bottomStart = 25.dp))
-                .background(color = MaterialTheme.colorScheme.primary)
-                .padding(20.dp, 30.dp)
+    if (isLoadingBarang) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+    } else if (isError || listBarang.isEmpty()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(32.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.KeyboardArrowLeft,
-                    contentDescription = null,
-                    modifier = Modifier.size(15.dp).scale(2.5f),
-                    tint = MaterialTheme.colorScheme.onPrimary,
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Gagal Memuat Data",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Red
                 )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Pastikan koneksi internet Anda menyala",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.Gray,
+                    textAlign =
+                        TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    } else {
 
-                Spacer(Modifier.width(20.dp))
+        Box (
+            modifier = modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+            // List Item
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(24.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                item { Spacer(Modifier.height(150.dp)) }
 
-                Text(text = "Kasir", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.titleMedium)
+                val daftarBarangFilter = if (searchValue == "") {
+                    listBarang
+                } else {
+                    listBarang.filter { barang ->
+                        barang.nama.contains(searchValue, ignoreCase = true)
+                    }
+                }
+
+                items(daftarBarangFilter) { barang ->
+                    DetailBarang(barang = barang)
+                }
+
+                item { Spacer(Modifier.height(60.dp)) }
+
             }
 
-            Spacer(Modifier.height(30.dp))
-
-            OutlinedTextField(
-                modifier = Modifier.fillMaxWidth(),
-                value = searchValue,
-                onValueChange = { teks -> searchValue = teks },
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surface,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                ),
-                shape = RoundedCornerShape(20.dp),
-                placeholder = { Text(text = "Cari barang...", color = MaterialTheme.colorScheme.secondary) },
-                leadingIcon = {
+            // Top Bar
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(bottomEnd = 25.dp, bottomStart = 25.dp))
+                    .background(color = MaterialTheme.colorScheme.primary)
+                    .padding(20.dp, 30.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = Icons.Default.Search,
+                        imageVector = Icons.Default.KeyboardArrowLeft,
                         contentDescription = null,
+                        modifier = Modifier.size(15.dp).scale(2.5f),
+                        tint = MaterialTheme.colorScheme.onPrimary,
                     )
+
+                    Spacer(Modifier.width(20.dp))
+
+                    Text(text = "Kasir", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.titleMedium)
                 }
+
+                Spacer(Modifier.height(30.dp))
+
+                OutlinedTextField(
+                    modifier = Modifier.fillMaxWidth(),
+                    value = searchValue,
+                    onValueChange = { teks -> searchValue = teks },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                    ),
+                    shape = RoundedCornerShape(20.dp),
+                    placeholder = { Text(text = "Cari barang...", color = MaterialTheme.colorScheme.secondary) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = null,
+                        )
+                    }
+                )
+            }
+
+            // Bottom Bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(color = MaterialTheme.colorScheme.surfaceVariant, width = 2.dp)
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(25.dp, 20.dp)
+                    .align(Alignment.BottomCenter),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column {
+                    Text(text = "$totalItem Item", style = MaterialTheme.typography.bodyLarge)
+                    Text(text = "Rp $totalHarga", style = MaterialTheme.typography.headlineLarge)
+                }
+
+                Button(
+                    onClick = {
+                        coroutineScope.launch {
+                            isLoading = true
+                            delay(2000)
+                            snackbarHostState.showSnackbar(
+                                "Pembayaran berhasil diproses!"
+                            )
+                            isLoading = false
+                        }
+                    },
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ),
+                    enabled = !isLoading
+                ) {
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = MaterialTheme.colorScheme.secondary,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Memproses...")
+                    } else {
+                        Text(text = "Bayar", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onPrimary)
+                    }
+                }
+            }
+
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier.align(Alignment.BottomCenter)
             )
         }
-
-        // Bottom Bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(color = MaterialTheme.colorScheme.surfaceVariant, width = 2.dp)
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(25.dp, 20.dp)
-                .align(Alignment.BottomCenter),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Column {
-                Text(text = "$totalItem Item", style = MaterialTheme.typography.bodyLarge)
-                Text(text = "Rp $totalHarga", style = MaterialTheme.typography.headlineLarge)
-            }
-
-            Button(
-                onClick = {
-                    coroutineScope.launch {
-                        isLoading = true
-                        delay(2000)
-                        snackbarHostState.showSnackbar(
-                            "Pembayaran berhasil diproses!"
-                        )
-                        isLoading = false
-                    }
-                },
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                ),
-                enabled = !isLoading
-            ) {
-                if (isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = MaterialTheme.colorScheme.secondary,
-                        strokeWidth = 2.dp
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Memproses...")
-                } else {
-                    Text(text = "Bayar", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onPrimary)
-                }
-            }
-        }
-
-        SnackbarHost(
-            hostState = snackbarHostState,
-            modifier = Modifier.align(Alignment.BottomCenter)
-        )
     }
 }
 
@@ -590,14 +702,18 @@ fun DetailBarang(barang: Barang) {
                 .padding(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Image(
-                painter = painterResource(id = barang.ImagesRes),
-                contentDescription = null,
+            AsyncImage(
+                model = barang.imagesUrl,
+                contentDescription = barang.nama,
+                placeholder = painterResource(id = R.drawable.gula),
+                error = painterResource(id = R.drawable.telur),
+
                 modifier = Modifier
                     .size(80.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .background(MaterialTheme.colorScheme.background)
                     .padding(5.dp),
+                contentScale = ContentScale.Crop
             )
 
             Spacer(Modifier.width(15.dp))
@@ -666,6 +782,7 @@ fun DetailBarang(barang: Barang) {
 
 @Composable
 fun DetailRinciBarang(modifier: Modifier = Modifier, barang: Barang, navController: NavController) {
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -680,15 +797,19 @@ fun DetailRinciBarang(modifier: Modifier = Modifier, barang: Barang, navControll
         ) {
             Spacer(Modifier.height(170.dp))
 
-            Image(
-                painter = painterResource(id = barang.ImagesRes),
-                contentDescription = null,
+            AsyncImage(
+                model = barang.imagesUrl,
+                contentDescription = barang.nama,
+                placeholder = painterResource(id = R.drawable.gula),
+                error = painterResource(id = R.drawable.telur),
+
                 modifier = Modifier
                     .fillMaxWidth()
                     .size(300.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .background(MaterialTheme.colorScheme.surface)
-                    .padding(5.dp)
+                    .padding(5.dp),
+                contentScale = ContentScale.Crop
             )
 
             Column(
@@ -758,27 +879,3 @@ fun DetailRinciBarang(modifier: Modifier = Modifier, barang: Barang, navControll
         }
     }
 }
-
-//@Preview(showBackground = true)
-//@Composable
-//fun KasirPreview() {
-//    PrakTAM2_2417051054Theme {
-//        Main()
-//    }
-//}
-
-@Preview(showBackground = true)
-@Composable
-fun DashboardPreview() {
-    PrakTAM2_2417051054Theme {
-        DashboardScreen(modifier = Modifier, navController = rememberNavController())
-    }
-}
-
-//@Preview(showBackground = true)
-//@Composable
-//fun DetailRinciPreview() {
-//    PrakTAM2_2417051054Theme {
-//        DetailRinciItem(barang = BarangSource.listBarang[0])
-//    }
-//}
